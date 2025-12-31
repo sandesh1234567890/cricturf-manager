@@ -42,8 +42,9 @@ const Booking: React.FC<BookingProps> = ({
         const slotTime = new Date();
         slotTime.setHours(hours, minutes, 0, 0);
 
-        // 30-minute grace period (30 * 60 * 1000 = 1,800,000ms)
-        const graceTime = new Date(slotTime.getTime() + 30 * 60 * 1000);
+        // 60-minute grace period (60 * 60 * 1000 = 3,600,000ms)
+        // This allows slots to be re-booked if freed up within their active hour
+        const graceTime = new Date(slotTime.getTime() + 60 * 60 * 1000);
 
         return now > graceTime;
     };
