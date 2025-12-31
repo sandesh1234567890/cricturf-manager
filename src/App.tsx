@@ -66,7 +66,12 @@ const App: React.FC = () => {
           if (payload.eventType === 'INSERT') {
             setBookings(prev => [...prev, payload.new as Booking]);
           } else if (payload.eventType === 'DELETE') {
-            setBookings(prev => prev.filter(b => b.id !== payload.old.id));
+            console.log('Real-time DELETE received:', payload.old);
+            if (payload.old && payload.old.id) {
+              setBookings(prev => prev.filter(b => b.id !== payload.old.id));
+            } else {
+              console.warn('Real-time DELETE received but missing ID. Ensure REPLICA IDENTITY FULL is set.');
+            }
           } else if (payload.eventType === 'UPDATE') {
             setBookings(prev => prev.map(b => b.id === payload.new.id ? (payload.new as Booking) : b));
           }
