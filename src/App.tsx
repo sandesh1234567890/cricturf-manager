@@ -8,29 +8,14 @@ import AdminLogin from './views/AdminLogin';
 import BookingModal from './components/BookingModal';
 import type { View, Booking } from './types';
 import { TURFS, SLOTS } from './constants';
+import { supabase } from './lib/supabase';
 
 const App: React.FC = () => {
   const [view, setView] = useState<View>('home');
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(() => {
     return localStorage.getItem('cricturf_admin_logged') === 'true';
   });
-  const [bookings, setBookings] = useState<Booking[]>(() => {
-    const saved = localStorage.getItem('cricturf_bookings');
-    return saved ? JSON.parse(saved) : [
-      {
-        id: 1698745,
-        turfId: 'main',
-        date: new Date().toISOString().split('T')[0],
-        timeSlotId: '18-19',
-        customerName: 'Rahul Dravid',
-        phone: '9876543210',
-        email: 'thewall@india.com',
-        status: 'Confirmed',
-        amount: 1200,
-        paymentMethod: 'UPI'
-      }
-    ];
-  });
+  const [bookings, setBookings] = useState<Booking[]>([]);
 
   const [selectedTurf, setSelectedTurf] = useState('main');
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
@@ -48,8 +33,40 @@ const App: React.FC = () => {
   } | null>(null);
 
   useEffect(() => {
-    localStorage.setItem('cricturf_bookings', JSON.stringify(bookings));
-  }, [bookings]);
+    // 1. Fetch initial bookings
+    const fetchBookings = async () => {
+      const { data, error } = await supabase
+        .from('bookings')
+        .select('*');
+
+      if (data) setBookings(data);
+      if (error) console.error('Error fetching bookings:', error);
+    };
+
+    fetchBookings();
+
+    // 2. Subscribe to real-time changes
+    const channel = supabase
+      .channel('schema-db-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'bookings' },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            setBookings(prev => [...prev, payload.new as Booking]);
+          } else if (payload.eventType === 'DELETE') {
+            setBookings(prev => prev.filter(b => b.id !== payload.old.id));
+          } else if (payload.eventType === 'UPDATE') {
+            setBookings(prev => prev.map(b => b.id === payload.new.id ? (payload.new as Booking) : b));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   const showNotification = (msg: string, type: 'success' | 'error' = 'success') => {
     setNotification({ msg, type });
@@ -74,9 +91,8 @@ const App: React.FC = () => {
     setModalState({ isOpen: true, slotId });
   };
 
-  const handleConfirmBooking = (details: Partial<Booking>) => {
-    const newBooking: Booking = {
-      id: Date.now(),
+  const handleConfirmBooking = async (details: Partial<Booking>) => {
+    const newBooking = {
       turfId: selectedTurf,
       date: selectedDate,
       timeSlotId: modalState.slotId!,
@@ -88,7 +104,16 @@ const App: React.FC = () => {
       paymentMethod: details.paymentMethod!
     };
 
-    setBookings(prev => [...prev, newBooking]);
+    const { error } = await supabase
+      .from('bookings')
+      .insert([newBooking]);
+
+    if (error) {
+      showNotification('Error saving booking. Please try again.', 'error');
+      console.error('Supabase error:', error);
+      return;
+    }
+
     showNotification(`Success! Booking confirmed via ${details.paymentMethod}`);
     if (isAdminLoggedIn) {
       setView('admin');
@@ -97,10 +122,19 @@ const App: React.FC = () => {
     }
   };
 
-  const handleCancelBooking = (id: number) => {
+  const handleCancelBooking = async (id: number) => {
     if (confirm('Are you sure you want to cancel this booking?')) {
-      setBookings(prev => prev.filter(b => b.id !== id));
-      showNotification('Booking cancelled successfully', 'error');
+      const { error } = await supabase
+        .from('bookings')
+        .delete()
+        .eq('id', id);
+
+      if (error) {
+        showNotification('Error cancelling booking.', 'error');
+        console.error('Supabase error:', error);
+      } else {
+        showNotification('Booking cancelled successfully', 'error');
+      }
     }
   };
 
