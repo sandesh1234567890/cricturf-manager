@@ -40,9 +40,15 @@ const App: React.FC = () => {
   useEffect(() => {
     // 1. Fetch initial bookings
     const fetchBookings = async () => {
+      // Optimize: Only fetch bookings from the last 2 days onwards to save bandwidth
+      const start = new Date();
+      start.setDate(start.getDate() - 2);
+      const dateStr = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-${String(start.getDate()).padStart(2, '0')}`;
+
       const { data, error } = await supabase
         .from('bookings')
-        .select('*');
+        .select('*')
+        .gte('date', dateStr);
 
       if (data) setBookings(data);
       if (error) console.error('Error fetching bookings:', error);
@@ -114,7 +120,11 @@ const App: React.FC = () => {
       .insert([newBooking]);
 
     if (error) {
-      showNotification('Error saving booking. Please try again.', 'error');
+      if (error.code === '23505') {
+        showNotification('Oops! This slot was just booked by someone else.', 'error');
+      } else {
+        showNotification('Error saving booking. Please try again.', 'error');
+      }
       console.error('Supabase error:', error);
       return;
     }
