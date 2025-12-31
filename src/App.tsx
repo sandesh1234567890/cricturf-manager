@@ -18,7 +18,12 @@ const App: React.FC = () => {
   const [bookings, setBookings] = useState<Booking[]>([]);
 
   const [selectedTurf, setSelectedTurf] = useState('main');
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const getTodayStr = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+
+  const [selectedDate, setSelectedDate] = useState(getTodayStr());
   const [modalState, setModalState] = useState<{
     isOpen: boolean;
     slotId: string | null;

@@ -1,6 +1,7 @@
-import React from 'react';
-import { Calendar, CheckCircle2, MapPin, Clock } from 'lucide-react';
+import { MapPin, Clock, Calendar as CalendarIcon, CheckCircle2 } from 'lucide-react';
 import { TURFS, SLOTS, PERIODS } from '../constants';
+import Calendar from '../components/Calendar';
+import React from 'react';
 
 interface BookingProps {
     selectedTurf: string;
@@ -21,16 +22,31 @@ const Booking: React.FC<BookingProps> = ({
 }) => {
     const currentTurf = TURFS[selectedTurf];
 
-    // Generate next 7 days
-    const dates = Array.from({ length: 7 }, (_, i) => {
-        const d = new Date();
-        d.setDate(d.getDate() + i);
-        return {
-            fullDate: d.toISOString().split('T')[0],
-            dayName: d.toLocaleDateString('en-US', { weekday: 'short' }),
-            dayNum: d.getDate()
-        };
-    });
+    const isSlotInPast = (slotLabel: string) => {
+        const now = new Date();
+        const getTodayStr = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        const todayStr = getTodayStr(now);
+
+        if (selectedDate > todayStr) return false;
+        if (selectedDate < todayStr) return true;
+
+        // Same day, check time
+        // Label format: "06:00 AM - 07:00 AM"
+        const startTimeStr = slotLabel.split(' - ')[0]; // "06:00 AM"
+        const [time, modifier] = startTimeStr.split(' ');
+        let [hours, minutes] = time.split(':').map(Number);
+
+        if (modifier === 'PM' && hours < 12) hours += 12;
+        if (modifier === 'AM' && hours === 12) hours = 0;
+
+        const slotTime = new Date();
+        slotTime.setHours(hours, minutes, 0, 0);
+
+        // 30-minute grace period (30 * 60 * 1000 = 1,800,000ms)
+        const graceTime = new Date(slotTime.getTime() + 30 * 60 * 1000);
+
+        return now > graceTime;
+    };
 
     return (
         <div className="max-w-7xl mx-auto px-4 py-8 fade-in">
@@ -64,24 +80,17 @@ const Booking: React.FC<BookingProps> = ({
                         </div>
                     </div>
 
-                    <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-                        <h3 className="text-lg font-bold mb-5 flex items-center gap-2 text-emerald-800">
-                            <Calendar size={20} /> Select Date
-                        </h3>
-                        <div className="grid grid-cols-4 gap-2">
-                            {dates.map(d => (
-                                <button
-                                    key={d.fullDate}
-                                    onClick={() => onSetDate(d.fullDate)}
-                                    className={`flex flex-col items-center p-3 rounded-xl border transition-all ${selectedDate === d.fullDate
-                                        ? 'bg-emerald-600 text-white border-emerald-600 ring-2 ring-emerald-200'
-                                        : 'bg-white text-gray-700 border-gray-200 hover:border-emerald-400'
-                                        }`}
-                                >
-                                    <span className="text-[10px] uppercase font-bold opacity-80">{d.dayName}</span>
-                                    <span className="text-lg font-bold">{d.dayNum}</span>
-                                </button>
-                            ))}
+                    <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                        <div className="p-6 border-b border-gray-100 bg-emerald-800 text-white">
+                            <h3 className="text-lg font-bold flex items-center gap-2">
+                                <MapPin size={20} /> Select Date
+                            </h3>
+                        </div>
+                        <div className="p-4">
+                            <Calendar
+                                selectedDate={selectedDate}
+                                onSetDate={onSetDate}
+                            />
                         </div>
                     </div>
                 </aside>
@@ -93,7 +102,7 @@ const Booking: React.FC<BookingProps> = ({
                             <div>
                                 <h2 className="text-2xl font-black text-gray-900 tracking-tight">{currentTurf.name}</h2>
                                 <p className="text-[11px] font-black text-gray-400 uppercase tracking-widest mt-1 flex items-center gap-1">
-                                    <Calendar size={10} strokeWidth={3} /> {new Date(selectedDate).toLocaleDateString('en-US', { dateStyle: 'full' })}
+                                    <CalendarIcon size={10} strokeWidth={3} /> {new Date(selectedDate).toLocaleDateString('en-US', { dateStyle: 'full' })}
                                 </p>
                             </div>
                             <div className="text-right">
@@ -112,27 +121,29 @@ const Booking: React.FC<BookingProps> = ({
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                         {SLOTS.filter(s => s.period === period).map(slot => {
                                             const isBooked = checkBooked(slot.id);
+                                            const isPast = isSlotInPast(slot.label);
+                                            const isDisabled = isBooked || isPast;
+
                                             return (
                                                 <button
                                                     key={slot.id}
-                                                    disabled={isBooked}
+                                                    disabled={isDisabled}
                                                     onClick={() => onInitBooking(slot.id)}
-                                                    className={`group relative p-5 rounded-2xl border-2 text-left transition-all ${isBooked
-                                                        ? 'bg-gray-50 border-gray-100 cursor-not-allowed'
+                                                    className={`group relative p-5 rounded-2xl border-2 text-left transition-all ${isDisabled
+                                                        ? 'bg-gray-50 border-gray-100 cursor-not-allowed opacity-60'
                                                         : 'bg-white border-gray-100 hover:border-emerald-500 hover:bg-emerald-50/30'
                                                         }`}
                                                 >
                                                     <div className="flex justify-between items-center">
                                                         <div>
-                                                            <span className={`block font-black text-xl mb-0.5 tracking-tight ${isBooked ? 'text-gray-400' : 'text-gray-900'}`}>
+                                                            <span className={`block font-black text-xl mb-0.5 tracking-tight ${isDisabled ? 'text-gray-400' : 'text-gray-900'}`}>
                                                                 {slot.label}
                                                             </span>
-                                                            <span className={`text-sm font-semibold flex items-center gap-1 ${isBooked ? 'text-gray-300' : 'text-emerald-600'}`}>
-                                                                {isBooked ? 'Already Booked' : 'Available Now'}
-                                                                {!isBooked && <CheckCircle2 size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" />}
+                                                            <span className={`text-sm font-semibold flex items-center gap-1 ${isDisabled ? 'text-gray-300' : 'text-emerald-600'}`}>
+                                                                {isBooked ? 'Already Booked' : isPast ? 'Not Available' : 'Available Now'}
                                                             </span>
                                                         </div>
-                                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${isBooked ? 'bg-gray-100 text-gray-300' : 'bg-emerald-50 text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white'
+                                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${isDisabled ? 'bg-gray-100 text-gray-300' : 'bg-emerald-50 text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white'
                                                             }`}>
                                                             <Clock size={20} />
                                                         </div>
