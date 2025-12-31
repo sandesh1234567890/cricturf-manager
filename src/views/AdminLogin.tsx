@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Lock, User, ShieldAlert } from 'lucide-react';
+import { Lock, ShieldAlert } from 'lucide-react';
 import Button from '../components/Button';
 
 interface AdminLoginProps {
